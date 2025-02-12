@@ -1,0 +1,24 @@
+{
+  "name": "ts-reverse-proxy",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon --exec ts-node src/index.ts",
+    "buikd": "tsc -p .",
+    "dev": "nodemon --exec ts-node src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@types/node": "^22.13.2",
+    "commander": "^13.1.0",
+    "http-proxy": "^1.18.1",
+    "nodemon": "^3.1.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.2"
+  }
+}
