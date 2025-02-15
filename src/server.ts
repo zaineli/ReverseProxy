@@ -36,6 +36,7 @@ export async function createServer(config: ServerConfig) {
             console.log(`New Worker ${newWorker.process.pid} started`);
         });
 
+        let currentWorkerIndex = 0;
         const server = http.createServer((req, res) => {
             if (WORKER_POOL.length === 0) {
                 res.statusCode = 500;
@@ -60,7 +61,8 @@ export async function createServer(config: ServerConfig) {
                 }
             }
 
-            const worker = WORKER_POOL[Math.floor(Math.random() * WORKER_POOL.length)];
+            const worker = WORKER_POOL[currentWorkerIndex];
+            currentWorkerIndex = (currentWorkerIndex + 1) % WORKER_POOL.length;
             const payload: WorkerMessage = {
                 requestType: 'http',
                 headers: req.headers,
