@@ -9,12 +9,13 @@ const headersSchema = z.object({
 
 const upstreamsSchema = z.object({
     id: z.string(),
-    url: z.string().url(),
+    url: z.string(),
 });
 
 const rulesSchema = z.object({
     path : z.string(),
-    upstream: z.array(z.string()),
+    upstream: z.array(z.string()).optional(),
+    static_file: z.string().optional(),
 })
 
 

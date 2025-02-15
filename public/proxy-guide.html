@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy Router Guide</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 40px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+        }
+        .route-table {
+            margin: 20px auto;
+            border-collapse: collapse;
+            width: 80%;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .route-table th, .route-table td {
+            padding: 12px;
+            border: 1px solid #ddd;
+        }
+        .route-table th {
+            background-color: #007bff;
+            color: white;
+        }
+        .route-table td {
+            font-size: 16px;
+        }
+        .route-table tr:hover {
+            background-color: #f1f1f1;
+        }
+        footer {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Proxy Router Guide</h1>
+    <p>Below is the list of routes configured in the proxy. Each route is redirected to the corresponding upstream server.</p>
+
+    <table class="route-table">
+        <thead>
+            <tr>
+                <th>Route Pattern</th>
+                <th>Redirects To</th>
+            </tr>
+        </thead>
+        <tbody id="routes-body">
+            <!-- Routes will be inserted here dynamically -->
+        </tbody>
+    </table>
+
+    <footer>
+        <p>&copy; 2025 Proxy Router | Powered by Node.js</p>
+    </footer>
+
+    <script>
+        // Proxy configuration (same as YAML but in JS format)
+        const proxyConfig = {
+            rules: [
+                { path: "^/todos$", upstream: "jsonplaceholder.typicode.com" },
+                { path: "^/posts(?:/\\d+)?$", upstream: "jsonplaceholder.typicode.com" },
+                { path: "^/comments(?:/\\d+)?$", upstream: "jsonplaceholder.typicode.com" },
+                { path: "^/users/(\\d+)/comments$", upstream: "jsonplaceholder.typicode.com" }
+            ]
+        };
+
+        // Insert routes into table dynamically
+        function loadRoutes() {
+            const tbody = document.getElementById("routes-body");
+
+            proxyConfig.rules.forEach(rule => {
+                const tr = document.createElement("tr");
+
+                const tdPath = document.createElement("td");
+                tdPath.textContent = rule.path;
+
+                const tdUpstream = document.createElement("td");
+                tdUpstream.textContent = rule.upstream;
+
+                tr.appendChild(tdPath);
+                tr.appendChild(tdUpstream);
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Load routes on page load
+        window.onload = loadRoutes;
+    </script>
+
+</body>
+</html>
