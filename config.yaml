@@ -1,0 +1,23 @@
+server:
+  listen: 8000
+  workers: 4
+
+  upstreams:
+    - id: node1
+      url: https://localhost:8080
+
+    - id: node2
+      url: https://localhost:8080
+  
+  headers:
+    - name: x-forward-for  # Fixed (was "key")
+      value: "$ip"
+
+    - name: Authorization  # Fixed (was "key")
+      value: "zain"
+  
+  rules:
+    - path: /
+      upstream:  # Fixed (was "upstreams")
+        - node1
+        - node2
