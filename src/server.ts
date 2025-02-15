@@ -5,6 +5,8 @@ import { Worker } from 'node:cluster';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { createClient } from 'redis';
+
 import { rootConfigSchema } from './config-schema';
 import { WorkerMessage, workerMessageSchema, ReplyMessage } from './server-schema';
 
@@ -16,9 +18,20 @@ interface ServerConfig {
     config: any;
 }
 
+// Rate limiting and throttling thresholds
+const RATE_LIMIT_THRESHOLD = 100;         // max requests per minute per IP
+const THROTTLE_THRESHOLD = 50;            // if requests > threshold then delay
+const THROTTLE_DELAY_MS = 1000;           // delay 1 sec for throttling
+const CACHE_TTL_SECONDS = 60;             // cache expiry
+
 export async function createServer(config: ServerConfig) {
     const { workerCount } = config;
     const WORKER_POOL: Worker[] = [];
+
+    // Create Redis client instance (primary only)
+    const redisClient = createClient();
+    redisClient.on('error', (err) => console.error('Redis Client Error', err));
+    await redisClient.connect();
 
     if (cluster.isPrimary) {
         console.log("Master process is running");
@@ -38,49 +51,87 @@ export async function createServer(config: ServerConfig) {
 
         let currentWorkerIndex = 0;
         const server = http.createServer((req, res) => {
-            if (WORKER_POOL.length === 0) {
+            (async () => {
+                if (WORKER_POOL.length === 0) {
+                    res.statusCode = 500;
+                    res.end("No worker available");
+                    return;
+                }
+                
+                // Rate limiting and throttling based on client IP
+                const ip = req.socket.remoteAddress || 'unknown';
+                const rateKey = `rate:${ip}`;
+                const requests = await redisClient.incr(rateKey);
+                if (requests === 1) {
+                    await redisClient.expire(rateKey, 60);
+                }
+                if (requests > RATE_LIMIT_THRESHOLD) {
+                    res.statusCode = 429;
+                    res.end("Too many requests");
+                    return;
+                }
+                if (requests > THROTTLE_THRESHOLD) {
+                    // Delay the request handling if traffic is high
+                    await new Promise(resolve => setTimeout(resolve, THROTTLE_DELAY_MS));
+                }
+
+                // If a rule matches a static file request, handle it immediately.
+                const parsedConfig = config.config;
+                const requestURL = req.url ?? '/';
+                const rule = parsedConfig.server.rules.find((rule: any) => new RegExp(rule.path).test(requestURL));
+                
+                if (rule?.static_file) {
+                    const filePath = path.join(STATIC_DIR, rule.static_file);
+                    if (fs.existsSync(filePath)) {
+                        res.writeHead(200, { 'Content-Type': 'text/html' });
+                        fs.createReadStream(filePath).pipe(res);
+                        return;
+                    } else {
+                        res.writeHead(404, { 'Content-Type': 'text/plain' });
+                        res.end("Static file not found");
+                        return;
+                    }
+                }
+
+                // Caching: Check if the response is already cached.
+                const cacheKey = `cache:${req.method}:${requestURL}`;
+                const cachedResponse = await redisClient.get(cacheKey);
+                if (cachedResponse) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(cachedResponse);
+                    return;
+                }
+
+                // Round robin the worker pool
+                const worker = WORKER_POOL[currentWorkerIndex];
+                currentWorkerIndex = (currentWorkerIndex + 1) % WORKER_POOL.length;
+                const payload: WorkerMessage = {
+                    requestType: 'http',
+                    headers: req.headers,
+                    body: '',
+                    url: requestURL,
+                };
+
+                worker.send(JSON.stringify(payload));
+
+                worker.once('message', async (message: string) => {
+                    const reply: ReplyMessage = JSON.parse(message);
+                    if (reply.errorCode) {
+                        res.statusCode = reply.errorCode;
+                        res.end(reply.errorMessage);
+                        return;
+                    }
+                    // Cache the successful response
+                    await redisClient.set(cacheKey, reply.data, {
+                        EX: CACHE_TTL_SECONDS,
+                    });
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(reply.data);
+                });
+            })().catch(err => {
+                console.error("Error processing request:", err);
                 res.statusCode = 500;
-                res.end("No worker available");
-                return;
-            }
-
-            const parsedConfig = config.config;
-            const requestURL = req.url ?? '/';
-            const rule = parsedConfig.server.rules.find((rule: any) => new RegExp(rule.path).test(requestURL));
-
-            if (rule?.static_file) {
-                const filePath = path.join(STATIC_DIR, rule.static_file);
-                if (fs.existsSync(filePath)) {
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    fs.createReadStream(filePath).pipe(res);
-                    return;
-                } else {
-                    res.writeHead(404, { 'Content-Type': 'text/plain' });
-                    res.end("Static file not found");
-                    return;
-                }
-            }
-
-            const worker = WORKER_POOL[currentWorkerIndex];
-            currentWorkerIndex = (currentWorkerIndex + 1) % WORKER_POOL.length;
-            const payload: WorkerMessage = {
-                requestType: 'http',
-                headers: req.headers,
-                body: '',
-                url: req.url ?? '/',
-            };
-
-            worker.send(JSON.stringify(payload));
-
-            worker.once('message', (message: string) => {
-                const reply: ReplyMessage = JSON.parse(message);
-                if (reply.errorCode) {
-                    res.statusCode = reply.errorCode;
-                    res.end(reply.errorMessage);
-                    return;
-                }
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(reply.data);
+                res.end("Internal server error");
             });
         });
 
