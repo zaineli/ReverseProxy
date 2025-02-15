@@ -3,21 +3,44 @@ server:
   workers: 4
 
   upstreams:
-    - id: node1
-      url: https://localhost:8080
+    - id: jsonplaceholder
+      url: jsonplaceholder.typicode.com
 
-    - id: node2
-      url: https://localhost:8080
-  
+    - id: users
+      url: jsonplaceholder.typicode.com
+
+    - id: posts
+      url: jsonplaceholder.typicode.com
+
+    - id: comments
+      url: jsonplaceholder.typicode.com
+
+    - id: fallingfalling
+      url: papertoilet.com
+
   headers:
-    - name: x-forward-for  # Fixed (was "key")
+    - name: x-forwarded-for
       value: "$ip"
 
-    - name: Authorization  # Fixed (was "key")
+    - name: Authorization
       value: "zain"
-  
+
   rules:
-    - path: /
-      upstream:  # Fixed (was "upstreams")
-        - node1
-        - node2
+    - path: "^/todos$"  # Exact match
+      upstream:  
+        - jsonplaceholder
+      
+    - path: "^/posts(?:/\\d+)?$"  # Matches /posts and /posts/123
+      upstream:  
+        - posts
+    
+    - path: "^/comments(?:/\\d+)?$"  # Matches /comments and /comments/99
+      upstream:  
+        - comments
+    
+    - path: "^/users/(\\d+)/comments$"  # Matches /users/42/comments
+      upstream:  
+        - users
+    
+    - path: "^/$"
+      static_file: proxy-guide.html 
